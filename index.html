@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Teams 채팅 요약 AI</title>
+  <script src="https://res.cdn.office.net/teams-js/2.22.0/js/MicrosoftTeams.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0d14;
+      --surface: #13131f;
+      --surface2: #1a1a2e;
+      --border: #2a2a45;
+      --accent: #6c63ff;
+      --accent2: #00d4aa;
+      --text: #e8e8f0;
+      --text-muted: #7878a0;
+      --error: #ff6b6b;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Noto Sans KR', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 20px 28px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface);
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    header h1 { font-size: 16px; font-weight: 500; letter-spacing: -0.3px; }
+    header p  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .user-badge {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Main layout ── */
+    main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Left panel: chat list ── */
+    .chat-list-panel {
+      width: 300px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+    }
+    .panel-header {
+      padding: 16px 16px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #btnRefresh {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #btnRefresh:hover { border-color: var(--accent); color: var(--accent); }
+
+    .chat-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .chat-list::-webkit-scrollbar { width: 4px; }
+    .chat-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .chat-item {
+      padding: 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      margin-bottom: 4px;
+      transition: background 0.15s;
+      border: 1px solid transparent;
+    }
+    .chat-item:hover { background: var(--surface2); }
+    .chat-item.active {
+      background: var(--surface2);
+      border-color: var(--accent);
+    }
+    .chat-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-item-preview {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-item-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Right panel: summary ── */
+    .summary-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .summary-toolbar {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+    }
+    .selected-chat-name {
+      font-size: 14px;
+      font-weight: 500;
+      flex: 1;
+    }
+    select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+    }
+    select:focus { outline: none; border-color: var(--accent); }
+
+    #btnSummarize {
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 13px;
+      font-family: 'Noto Sans KR', sans-serif;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    #btnSummarize:hover { opacity: 0.9; }
+    #btnSummarize:active { transform: scale(0.97); }
+    #btnSummarize:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Summary output ── */
+    .summary-body { flex: 1; overflow-y: auto; padding: 24px; }
+
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+    .placeholder-icon { font-size: 48px; opacity: 0.3; }
+    .placeholder p { font-size: 14px; }
+
+    .loading-dots {
+      display: flex; gap: 6px; justify-content: center; margin: 40px 0;
+    }
+    .loading-dots span {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-10px); opacity: 1; }
+    }
+
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .summary-card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .summary-card .meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .summary-section { margin-bottom: 20px; }
+    .summary-section h3 {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 10px;
+    }
+    .summary-section p, .summary-section li {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #c8c8e0;
+    }
+    .summary-section ul { padding-left: 18px; }
+    .summary-section li { margin-bottom: 6px; }
+
+    .one-liner {
+      background: linear-gradient(135deg, rgba(108,99,255,0.15), rgba(0,212,170,0.1));
+      border: 1px solid rgba(108,99,255,0.3);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.6;
+    }
+
+    /* ── Messages raw view ── */
+    .messages-raw {
+      margin-top: 20px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+    .messages-raw summary {
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 10px;
+    }
+    .message-row {
+      display: flex;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 12px;
+    }
+    .message-row .time {
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+      width: 44px;
+    }
+    .message-row .sender {
+      color: var(--accent);
+      flex-shrink: 0;
+      width: 90px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .message-row .text { color: #c8c8e0; flex: 1; word-break: break-word; }
+
+    .error-box {
+      background: rgba(255,107,107,0.1);
+      border: 1px solid rgba(255,107,107,0.3);
+      border-radius: 10px;
+      padding: 16px;
+      color: var(--error);
+      font-size: 13px;
+    }
+
+    /* ── API key modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      width: 420px;
+      animation: fadeIn 0.3s ease;
+    }
+    .modal h2 { font-size: 16px; margin-bottom: 6px; }
+    .modal p { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+    .modal input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 16px;
+    }
+    .modal input:focus { outline: none; border-color: var(--accent); }
+    .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+    .btn-primary {
+      background: var(--accent);
+      color: white; border: none;
+      border-radius: 8px; padding: 9px 20px;
+      font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background: none; color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 16px;
+      font-size: 13px; font-family: 'Noto Sans KR', sans-serif;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- API Key 입력 모달 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2>🔑 Claude API Key 설정</h2>
+    <p>요약에 사용할 Anthropic Claude API Key를 입력해주세요.<br>키는 브라우저 localStorage에만 저장되며 외부로 전송되지 않습니다.</p>
+    <input type="password" id="inputApiKey" placeholder="sk-ant-api03-..." />
+    <div class="modal-btns">
+      <button class="btn-secondary" onclick="skipApiKey()">나중에</button>
+      <button class="btn-primary" onclick="saveApiKey()">저장</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">💬</div>
+  <div>
+    <h1>Teams 채팅 요약 AI</h1>
+    <p>Microsoft Graph + Claude</p>
+  </div>
+  <div class="user-badge" id="userBadge">로딩중...</div>
+</header>
+
+<main>
+  <!-- 채팅 목록 패널 -->
+  <div class="chat-list-panel">
+    <div class="panel-header">
+      내 채팅
+      <button id="btnRefresh" onclick="loadChats()">↻ 새로고침</button>
+    </div>
+    <div class="chat-list" id="chatList">
+      <div class="placeholder">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 요약 패널 -->
+  <div class="summary-panel">
+    <div class="summary-toolbar">
+      <span class="selected-chat-name" id="selectedChatName">채팅을 선택하세요</span>
+      <select id="msgCount">
+        <option value="20">최근 20개</option>
+        <option value="50">최근 50개</option>
+        <option value="100">최근 100개</option>
+      </select>
+      <button id="btnSummarize" onclick="summarize()" disabled>✨ 요약하기</button>
+    </div>
+    <div class="summary-body" id="summaryBody">
+      <div class="placeholder">
+        <div class="placeholder-icon">🤖</div>
+        <p>채팅을 선택하고 요약하기를 눌러주세요</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // ── 상태 ──
+  let graphToken = null;
+  let selectedChat = null;
+  let chats = [];
+  let claudeApiKey = localStorage.getItem('claude_api_key') || '';
+
+  // ── 초기화 ──
+  microsoftTeams.app.initialize().then(() => {
+    if (claudeApiKey) {
+      document.getElementById('modalOverlay').style.display = 'none';
+    }
+    initAuth();
+  });
+
+  function saveApiKey() {
+    const key = document.getElementById('inputApiKey').value.trim();
+    if (!key.startsWith('sk-ant')) {
+      alert('올바른 Claude API Key를 입력해주세요 (sk-ant-...)');
+      return;
+    }
+    claudeApiKey = key;
+    localStorage.setItem('claude_api_key', key);
+    document.getElementById('modalOverlay').style.display = 'none';
+  }
+  function skipApiKey() {
+    document.getElementById('modalOverlay').style.display = 'none';
+  }
+
+  // ── Teams SSO → Graph Token ──
+  async function initAuth() {
+    try {
+      // Teams SSO 토큰 획득
+      const ssoToken = await microsoftTeams.authentication.getAuthToken();
+
+      // OBO (On-Behalf-Of) flow: 직접 Graph API 호출 시에는 토큰을 그대로 사용 불가
+      // 간단 구현: 토큰을 직접 Graph API에 사용 시도 (조직 설정에 따라 동작)
+      graphToken = ssoToken;
+
+      // 사용자 정보 표시
+      const me = await graphFetch('/me?$select=displayName');
+      document.getElementById('userBadge').textContent = me.displayName || '사용자';
+
+      loadChats();
+    } catch (e) {
+      // SSO 실패 → 수동 토큰 입력 fallback
+      console.warn('SSO 실패, 수동 토큰 모드:', e);
+      document.getElementById('userBadge').textContent = '토큰 필요';
+      showManualTokenPrompt();
+    }
+  }
+
+  function showManualTokenPrompt() {
+    const token = prompt('Graph API 토큰을 직접 붙여넣어 주세요 (Bearer 제외):');
+    if (token) {
+      graphToken = token;
+      const me = graphFetch('/me?$select=displayName').then(r => {
+        document.getElementById('userBadge').textContent = r.displayName || '사용자';
+      });
+      loadChats();
+    }
+  }
+
+  // ── Graph API 헬퍼 ──
+  async function graphFetch(path, params = '') {
+    const url = `https://graph.microsoft.com/v1.0${path}${params}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${graphToken}` }
+    });
+    if (!res.ok) throw new Error(`Graph API 오류: ${res.status} ${await res.text()}`);
+    return res.json();
+  }
+
+  // ── 채팅 목록 로드 ──
+  async function loadChats() {
+    document.getElementById('chatList').innerHTML = `
+      <div style="padding:16px;text-align:center;">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">채팅 목록 불러오는 중...</p>
+      </div>`;
+    try {
+      const data = await graphFetch('/me/chats', '?$expand=members&$top=30');
+      chats = data.value || [];
+      renderChatList(chats);
+    } catch (e) {
+      document.getElementById('chatList').innerHTML = `<div style="padding:16px;"><div class="error-box">${e.message}</div></div>`;
+    }
+  }
+
+  function renderChatList(list) {
+    if (!list.length) {
+      document.getElementById('chatList').innerHTML = '<div style="padding:16px;font-size:13px;color:var(--text-muted);">채팅이 없습니다</div>';
+      return;
+    }
+    document.getElementById('chatList').innerHTML = list.map((c, i) => {
+      const name = getChatName(c);
+      const type = c.chatType === 'group' ? '그룹' : c.chatType === 'oneOnOne' ? '1:1' : '채널';
+      const date = c.lastUpdatedDateTime ? new Date(c.lastUpdatedDateTime).toLocaleDateString('ko-KR') : '';
+      return `
+        <div class="chat-item" id="chat-${i}" onclick="selectChat(${i})">
+          <div class="chat-item-name">${escHtml(name)}</div>
+          <div class="chat-item-preview">${type}</div>
+          <div class="chat-item-meta">${date}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function getChatName(chat) {
+    if (chat.topic) return chat.topic;
+    if (chat.members && chat.members.length) {
+      return chat.members
+        .filter(m => m.displayName)
+        .map(m => m.displayName)
+        .join(', ')
+        .slice(0, 40) || '알 수 없음';
+    }
+    return `채팅 (${chat.chatType})`;
+  }
+
+  function selectChat(idx) {
+    document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(`chat-${idx}`)?.classList.add('active');
+    selectedChat = chats[idx];
+    document.getElementById('selectedChatName').textContent = getChatName(selectedChat);
+    document.getElementById('btnSummarize').disabled = false;
+    document.getElementById('summaryBody').innerHTML = `
+      <div class="placeholder">
+        <div class="placeholder-icon">✨</div>
+        <p>요약하기 버튼을 눌러주세요</p>
+      </div>`;
+  }
+
+  // ── 메시지 가져오기 ──
+  async function fetchMessages(chatId, top) {
+    const data = await graphFetch(
+      `/me/chats/${chatId}/messages`,
+      `?$top=${top}&$orderby=createdDateTime desc`
+    );
+    return (data.value || []).reverse();
+  }
+
+  function parseMessages(messages) {
+    return messages
+      .filter(m => m.messageType === 'message' && m.body?.content)
+      .map(m => {
+        const sender = m.from?.user?.displayName || '알 수 없음';
+        const time = m.createdDateTime?.substring(11, 16) || '';
+        const text = m.body.content
+          .replace(/<[^>]+>/g, '')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .trim();
+        return { sender, time, text };
+      })
+      .filter(m => m.text.length > 0);
+  }
+
+  // ── Claude 요약 ──
+  async function callClaude(messages, chatName) {
+    if (!claudeApiKey) {
+      document.getElementById('modalOverlay').style.display = 'flex';
+      throw new Error('Claude API Key가 없습니다');
+    }
+
+    const transcript = messages
+      .map(m => `[${m.time}] ${m.sender}: ${m.text}`)
+      .join('\n');
+
+    const prompt = `다음은 Microsoft Teams 채팅 "${chatName}"의 대화 내용입니다.
+
+${transcript}
+
+위 대화를 아래 형식으로 한국어로 요약해주세요:
+
+## 📋 주요 내용
+- (핵심 토픽과 논의된 내용을 3~5줄 bullet로)
+
+## 👥 참여자별 주요 발언
+- (이름: 핵심 발언 요약)
+
+## ✅ 결론 / 액션 아이템
+- (결정된 사항이나 할 일이 있으면 정리, 없으면 "특별한 결론 없음")
+
+## 💬 한줄 요약
+(전체 대화를 한 문장으로)`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) throw new Error(`Claude API 오류: ${res.status}`);
+    const data = await res.json();
+    return data.content?.[0]?.text || '요약 실패';
+  }
+
+  // ── 요약 실행 ──
+  async function summarize() {
+    if (!selectedChat) return;
+    const top = parseInt(document.getElementById('msgCount').value);
+    const chatName = getChatName(selectedChat);
+
+    document.getElementById('btnSummarize').disabled = true;
+    document.getElementById('summaryBody').innerHTML = `
+      <div style="padding:40px;text-align:center;">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:12px;">메시지 불러오는 중...</p>
+      </div>`;
+
+    try {
+      const rawMessages = await fetchMessages(selectedChat.id, top);
+      const messages = parseMessages(rawMessages);
+
+      if (!messages.length) {
+        document.getElementById('summaryBody').innerHTML = `
+          <div style="padding:24px;"><div class="error-box">메시지가 없거나 불러올 수 없습니다.</div></div>`;
+        return;
+      }
+
+      document.getElementById('summaryBody').innerHTML = `
+        <div style="padding:40px;text-align:center;">
+          <div class="loading-dots"><span></span><span></span><span></span></div>
+          <p style="font-size:13px;color:var(--text-muted);margin-top:12px;">Claude가 요약 중... (${messages.length}개 메시지)</p>
+        </div>`;
+
+      const summary = await callClaude(messages, chatName);
+      renderSummary(chatName, messages, summary, top);
+
+    } catch (e) {
+      document.getElementById('summaryBody').innerHTML = `
+        <div style="padding:24px;"><div class="error-box">❌ ${escHtml(e.message)}</div></div>`;
+    } finally {
+      document.getElementById('btnSummarize').disabled = false;
+    }
+  }
+
+  function renderSummary(chatName, messages, summaryMd, top) {
+    const summaryHtml = markdownToHtml(summaryMd);
+    const timeRange = messages.length
+      ? `${messages[0].time} ~ ${messages[messages.length-1].time}`
+      : '';
+
+    const rawRows = messages.map(m => `
+      <div class="message-row">
+        <span class="time">${escHtml(m.time)}</span>
+        <span class="sender">${escHtml(m.sender)}</span>
+        <span class="text">${escHtml(m.text)}</span>
+      </div>`).join('');
+
+    document.getElementById('summaryBody').innerHTML = `
+      <div class="summary-card">
+        <h2>💬 ${escHtml(chatName)}</h2>
+        <div class="meta">${timeRange} · ${messages.length}개 메시지 (최근 ${top}개 기준)</div>
+        <div class="summary-content">${summaryHtml}</div>
+        <details class="messages-raw">
+          <summary>▶ 원본 메시지 보기 (${messages.length}개)</summary>
+          <div style="margin-top:10px;">${rawRows}</div>
+        </details>
+      </div>`;
+  }
+
+  // ── 마크다운 → HTML (간이) ──
+  function markdownToHtml(md) {
+    return md
+      .replace(/^## (.+)$/gm, '<h3 style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent2);margin:20px 0 10px;">$1</h3>')
+      .replace(/^- (.+)$/gm, '<li style="font-size:14px;line-height:1.7;color:#c8c8e0;margin-bottom:6px;">$1</li>')
+      .replace(/(<li.*<\/li>\n?)+/gs, m => `<ul style="padding-left:18px;margin-bottom:12px;">${m}</ul>`)
+      .replace(/\n\n/g, '<br>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
